@@ -176,5 +176,24 @@ router.get('/leaderboard', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+// ADD THIS CODE BEFORE THE LAST LINE:
 
+// Admin endpoint - get all users
+router.get('/admin/users', async (req, res) => {
+  try {
+    const users = await WaitlistUser.find()
+      .sort({ joinedAt: -1 })
+      .select('email mobile position referralCode joinedAt -_id');
+    
+    res.json({ 
+      success: true, 
+      total: users.length,
+      users: users 
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Make sure this line is BELOW your new code
 module.exports = router;
