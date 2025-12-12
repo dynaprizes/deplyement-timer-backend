@@ -57,27 +57,41 @@ app.get('/health', async (req, res) => {
   try {
     const isConnected = mongoose.connection.readyState === 1;
     
+    // If not connected immediately, wait 1 second and check again
     if (!isConnected) {
-      // Try to check if we're in the process of connecting
+      // Wait a moment for connection to establish
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const isConnectedNow = mongoose.connection.readyState === 1;
+      
+      if (isConnectedNow) {
+        const total = await WaitlistUser.countDocuments();
+        return res.json({ 
+          status: 'ok', 
+          totalUsers: total,
+          database: 'mongodb',
+          timestamp: new Date().toISOString(),
+          message: '✅ MongoDB connected after warm-up'
+        });
+      }
+      
       return res.json({ 
-        status: 'connecting', 
+        status: 'warmup', 
         totalUsers: 0,
         database: 'connecting',
         timestamp: new Date().toISOString(),
-        message: 'MongoDB connection establishing...'
+        message: 'MongoDB connection warming up...'
       });
     }
     
-    // Only count documents if connected
-    const total = await mongoose.connection.db ? 
-      await mongoose.connection.db.collection('waitlistusers').countDocuments() : 0;
-    
+    // Already connected
+    const total = await WaitlistUser.countDocuments();
     res.json({ 
       status: 'ok', 
       totalUsers: total,
       database: 'mongodb',
       timestamp: new Date().toISOString(),
-      message: '✅ Fully connected to MongoDB'
+      message: '✅ MongoDB connected'
     });
     
   } catch (error) {
