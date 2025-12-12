@@ -39,20 +39,35 @@ app.get('/test', (req, res) => {
   });
 });
 
-// JOIN WAITLIST (WORKS 100%)
+// JOIN WAITLIST (UPDATED - accepts mobile-only)
 app.post('/api/waitlist/join', async (req, res) => {
   try {
     const { email, mobile } = req.body;
     
-    // Validate email
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ error: 'Valid email required' });
+    // NEW VALIDATION: Accept EITHER email OR mobile
+    const hasEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    const hasMobile = mobile && /^[0-9]{10,15}$/.test(mobile.replace(/\D/g, ''));
+    
+    if (!hasEmail && !hasMobile) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Please provide either a valid email or mobile number (10+ digits)' 
+      });
     }
     
-    const emailLower = email.toLowerCase();
+    // Check if already joined (by email OR mobile)
+    let existingUser = null;
     
-    // Check if already joined
-    const existingUser = waitlistUsers.find(u => u.email === emailLower);
+    if (hasEmail) {
+      const emailLower = email.toLowerCase();
+      existingUser = waitlistUsers.find(u => u.email === emailLower);
+    }
+    
+    if (!existingUser && hasMobile) {
+      const cleanMobile = mobile.replace(/\D/g, '');
+      existingUser = waitlistUsers.find(u => u.mobile === cleanMobile);
+    }
+    
     if (existingUser) {
       return res.json({
         success: true,
@@ -67,25 +82,29 @@ app.post('/api/waitlist/join', async (req, res) => {
     const position = waitlistUsers.length + 1;
     const user = {
       id: userCounter++,
-      email: emailLower,
-      mobile: mobile || '',
+      email: hasEmail ? email.toLowerCase() : `mobile_${mobile.replace(/\D/g, '')}@dynaprizes.mobile`,
+      mobile: hasMobile ? mobile.replace(/\D/g, '') : '',
       position: position,
       referralCode: generateReferralCode(),
       joinedAt: new Date().toISOString(),
       metadata: {
         ip: req.ip,
         userAgent: req.headers['user-agent'],
-        source: 'website'
+        source: 'website',
+        signupType: hasEmail && hasMobile ? 'both' : hasEmail ? 'email' : 'mobile'
       }
     };
     
     waitlistUsers.push(user);
     
-    console.log(`✅ New user joined: ${emailLower}, position: ${position}`);
+    console.log(`✅ New user joined: ${hasEmail ? email : 'Mobile user'}, position: ${position}`);
     
     res.json({
       success: true,
-      message: '🎉 Successfully joined waitlist!',
+      message: hasEmail && hasMobile ? 
+        '🎉 Successfully joined waitlist with email & mobile!' :
+        hasEmail ? '🎉 Successfully joined waitlist with email!' :
+        '🎉 Successfully joined waitlist with mobile!',
       position: user.position,
       referralCode: user.referralCode,
       total: waitlistUsers.length,
@@ -94,7 +113,11 @@ app.post('/api/waitlist/join', async (req, res) => {
     
   } catch (error) {
     console.error('Join error:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
+    res.status(500).json({ 
+      success: false,
+      error: 'Server error', 
+      details: error.message 
+    });
   }
 });
 
