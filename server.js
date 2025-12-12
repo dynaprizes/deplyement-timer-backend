@@ -4,54 +4,47 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 
 const app = express();
-
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// MONGODB CONNECTION
-const MONGODB_URI = 'mongodb+srv://dynaprizes_admin:Vittu%232030@cluster0.welog2q.mongodb.net/dynaprizes_waitlist?retryWrites=true&w=majority';
+// ===> FINAL MONGODB CONNECTION STRING <===
+const MONGODB_URI = 'mongodb+srv://dynaprizes_admin:Vittu%232030@cluster0.welog2q.mongodb.net/dynaprizes_waitlist?retryWrites=true&w=majority&appName=Cluster0';
 
-mongoose.connect(MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log('✅ MongoDB Connected Successfully!'))
-.catch(err => {
-  console.log('❌ MongoDB Connection Failed:', err.message);
-  console.log('⚠️ Using in-memory storage as fallback');
-});
+// Connect to MongoDB
+mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log('✅ MongoDB Connected!'))
+  .catch(err => {
+    console.log('❌ MongoDB Connection Failed:', err.message);
+    console.log('Attempted URI:', MONGODB_URI); // This will help debug
+  });
 
-// Database Schema
-const waitlistUserSchema = new mongoose.Schema({
-  email: { type: String, lowercase: true },
+// User Schema
+const userSchema = new mongoose.Schema({
+  email: String,
   mobile: String,
   position: Number,
   referralCode: String,
   joinedAt: { type: Date, default: Date.now }
 });
+const WaitlistUser = mongoose.model('WaitlistUser', userSchema);
 
-const WaitlistUser = mongoose.model('WaitlistUser', waitlistUserSchema);
-
-// Health Check
+// Health Check Endpoint (MUST SHOW "mongodb" if connected)
 app.get('/health', async (req, res) => {
-  const isConnected = mongoose.connection.readyState === 1;
-  const totalUsers = await WaitlistUser.countDocuments();
+  const isConnected = mongoose.connection.readyState === 1; // 1 = connected
+  const total = await WaitlistUser.countDocuments();
   
   res.json({ 
     status: 'ok', 
-    database: isConnected ? 'mongodb' : 'disconnected',
-    totalUsers: totalUsers,
+    totalUsers: total,
+    database: isConnected ? 'mongodb' : 'disconnected', // <-- Check this!
     timestamp: new Date().toISOString()
   });
 });
 
-// JOIN WAITLIST
+// Join Waitlist Endpoint
 app.post('/api/waitlist/join', async (req, res) => {
   try {
     const { email, mobile } = req.body;
-    
-    // Validation
     const hasEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     const hasMobile = mobile && /^[0-9]{10,15}$/.test(mobile.replace(/\D/g, ''));
     
@@ -65,7 +58,6 @@ app.post('/api/waitlist/join', async (req, res) => {
     const emailLower = hasEmail ? email.toLowerCase() : `mobile_${mobile.replace(/\D/g, '')}@dynaprizes.mobile`;
     const cleanMobile = hasMobile ? mobile.replace(/\D/g, '') : '';
     
-    // Check existing user
     const existingUser = await WaitlistUser.findOne({
       $or: [
         { email: emailLower },
@@ -83,15 +75,14 @@ app.post('/api/waitlist/join', async (req, res) => {
       });
     }
     
-    // Get position
     const position = await WaitlistUser.countDocuments() + 1;
+    const referralCode = 'DYN' + Math.random().toString(36).substr(2, 6).toUpperCase();
     
-    // Create user
     const user = await WaitlistUser.create({
       email: emailLower,
       mobile: cleanMobile,
       position: position,
-      referralCode: 'DYN' + Math.random().toString(36).substr(2, 6).toUpperCase(),
+      referralCode: referralCode,
       joinedAt: new Date()
     });
     
@@ -107,6 +98,7 @@ app.post('/api/waitlist/join', async (req, res) => {
     });
     
   } catch (error) {
+    console.error('Join error:', error);
     res.status(500).json({ 
       success: false,
       error: 'Server error' 
@@ -114,33 +106,19 @@ app.post('/api/waitlist/join', async (req, res) => {
   }
 });
 
-// GET STATS
+// Get Stats Endpoint
 app.get('/api/waitlist/stats', async (req, res) => {
   try {
     const total = await WaitlistUser.countDocuments();
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayCount = await WaitlistUser.countDocuments({ 
-      joinedAt: { $gte: today } 
-    });
-    
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    const weekCount = await WaitlistUser.countDocuments({ 
-      joinedAt: { $gte: weekAgo } 
-    });
-    
-    const recent = await WaitlistUser.find()
-      .sort({ joinedAt: -1 })
-      .limit(10)
-      .select('email position joinedAt');
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayCount = await WaitlistUser.countDocuments({ joinedAt: { $gte: today } });
+    const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+    const weekCount = await WaitlistUser.countDocuments({ joinedAt: { $gte: weekAgo } });
     
     res.json({
       total: total,
       today: todayCount,
       week: weekCount,
-      recent: recent,
       timestamp: new Date().toISOString()
     });
     
@@ -149,12 +127,10 @@ app.get('/api/waitlist/stats', async (req, res) => {
   }
 });
 
-// ADMIN ENDPOINT
+// Admin Users Endpoint
 app.get('/api/waitlist/admin/users', async (req, res) => {
   try {
-    const users = await WaitlistUser.find()
-      .sort({ joinedAt: -1 });
-    
+    const users = await WaitlistUser.find().sort({ joinedAt: -1 });
     res.json({ 
       success: true, 
       total: users.length,
@@ -178,6 +154,5 @@ app.get('/', (req, res) => {
   });
 });
 
-// Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
