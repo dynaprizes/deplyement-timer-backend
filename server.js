@@ -8,8 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 // ===> FINAL MONGODB CONNECTION STRING <===
-const MONGODB_URI = 'mongodb+srv://dynaprizes_admin:Vittu%232030@cluster0.welog2q.mongodb.net/dynaprizes_waitlist?retryWrites=true&w=majority&appName=Cluster0';
-
+const MONGODB_URI = 'mongodb+srv://dynaprizes_admin:Vittu%232030@cluster0.welog2q.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 // Connect to MongoDB
 mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('✅ MongoDB Connected!'))
@@ -30,17 +29,42 @@ const WaitlistUser = mongoose.model('WaitlistUser', userSchema);
 
 // Health Check Endpoint (MUST SHOW "mongodb" if connected)
 app.get('/health', async (req, res) => {
-  const isConnected = mongoose.connection.readyState === 1; // 1 = connected
-  const total = await WaitlistUser.countDocuments();
-  
-  res.json({ 
-    status: 'ok', 
-    totalUsers: total,
-    database: isConnected ? 'mongodb' : 'disconnected', // <-- Check this!
-    timestamp: new Date().toISOString()
-  });
+  try {
+    const isConnected = mongoose.connection.readyState === 1;
+    
+    if (!isConnected) {
+      // Try to check if we're in the process of connecting
+      return res.json({ 
+        status: 'connecting', 
+        totalUsers: 0,
+        database: 'connecting',
+        timestamp: new Date().toISOString(),
+        message: 'MongoDB connection establishing...'
+      });
+    }
+    
+    // Only count documents if connected
+    const total = await mongoose.connection.db ? 
+      await mongoose.connection.db.collection('waitlistusers').countDocuments() : 0;
+    
+    res.json({ 
+      status: 'ok', 
+      totalUsers: total,
+      database: 'mongodb',
+      timestamp: new Date().toISOString(),
+      message: '✅ Fully connected to MongoDB'
+    });
+    
+  } catch (error) {
+    res.json({ 
+      status: 'error', 
+      totalUsers: 0,
+      database: 'error',
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
 });
-
 // Join Waitlist Endpoint
 app.post('/api/waitlist/join', async (req, res) => {
   try {
