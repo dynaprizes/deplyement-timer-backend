@@ -9,13 +9,39 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://dynaprizes_admin:vittu%23214@cluster0.welog2q.mongodb.net/dynaprizes?retryWrites=true&w=majority&appName=Cluster0')
-  .then(() => console.log('✅ MongoDB Connected'))
-  .catch(err => console.error('❌ MongoDB Error:', err));
-
+// MongoDB Connection with proper settings
+mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://dynaprizes_admin:vittu%23214@cluster0.welog2q.mongodb.net/dynaprizes?retryWrites=true&w=majority&appName=Cluster0', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 10000, // Timeout after 10 seconds
+  socketTimeoutMS: 45000, // Close sockets after 45 seconds
+  maxPoolSize: 10, // Maintain up to 10 socket connections
+  minPoolSize: 1,
+})
+.then(() => {
+  console.log('✅ MongoDB Connected');
+  console.log('Host:', mongoose.connection.host);
+})
+.catch(err => {
+  console.error('❌ MongoDB Connection Failed:', err.message);
+  console.log('Connection URI:', process.env.MONGODB_URI ? 'Set' : 'Not set');
+});
 // Import WaitlistUser model from file
 const WaitlistUser = require('./models/WaitlistUser');
+
+// Simple test (no DB)
+app.get('/test', (req, res) => {
+  res.json({ status: 'ok', message: 'Backend running' });
+});
+
+// Simple waitlist test (no counting)
+app.get('/api/waitlist/simple-stats', (req, res) => {
+  res.json({ 
+    total: 0, 
+    message: 'Database connection in progress',
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Health check
 app.get('/health', async (req, res) => {
