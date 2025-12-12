@@ -1,3 +1,7 @@
+console.log('=== FORCE NEW DEPLOYMENT - NO LEGACY ===');
+console.log('Timestamp:', new Date().toISOString());
+console.log('MongoDB URI exists:', !!process.env.MONGODB_URI);
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
