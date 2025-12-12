@@ -8,7 +8,9 @@ app.use(cors());
 app.use(express.json());
 
 // ===> FINAL MONGODB CONNECTION STRING <===
-const MONGODB_URI = 'mongodb+srv://dynaprizes_admin:Vittu%232030@cluster0.welog2q.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+
+const MONGODB_URI = 'mongodb+srv://dynaprizes_app:Dynaprizes2024!@cluster0.welog2q.mongodb.net/dynaprizes?retryWrites=true&w=majority&appName=Cluster0';
+
 // Connect to MongoDB
 mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('✅ MongoDB Connected!'))
