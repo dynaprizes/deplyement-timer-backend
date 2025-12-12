@@ -9,23 +9,74 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// MongoDB Connection with proper settings
-mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://dynaprizes_admin:vittu%23214@cluster0.welog2q.mongodb.net/dynaprizes?retryWrites=true&w=majority&appName=Cluster0', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  serverSelectionTimeoutMS: 10000, // Timeout after 10 seconds
-  socketTimeoutMS: 45000, // Close sockets after 45 seconds
-  maxPoolSize: 10, // Maintain up to 10 socket connections
-  minPoolSize: 1,
-})
-.then(() => {
-  console.log('✅ MongoDB Connected');
-  console.log('Host:', mongoose.connection.host);
-})
-.catch(err => {
-  console.error('❌ MongoDB Connection Failed:', err.message);
-  console.log('Connection URI:', process.env.MONGODB_URI ? 'Set' : 'Not set');
+// MongoDB Connection for Vercel
+console.log('🌐 Attempting MongoDB connection on Vercel...');
+
+const MONGODB_URI = process.env.MONGODB_URI;
+
+if (MONGODB_URI) {
+  mongoose.connect(MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    serverSelectionTimeoutMS: 10000, // 10 seconds
+    socketTimeoutMS: 30000, // 30 seconds
+    maxPoolSize: 5,
+    minPoolSize: 1,
+    retryWrites: true,
+    w: 'majority'
+  })
+  .then(() => {
+    console.log('🎉 MongoDB CONNECTED on Vercel!');
+    console.log('Host:', mongoose.connection.host);
+    console.log('Database:', mongoose.connection.db?.databaseName);
+  })
+  .catch(err => {
+    console.error('💥 MongoDB FAILED on Vercel:', err.message);
+    console.error('Error code:', err.code);
+    console.error('Error name:', err.name);
+  });
+} else {
+  console.log('⚠️ No MONGODB_URI found in environment');
+}
+
+// TEST MongoDB connection on Vercel
+app.get('/test-mongo', async (req, res) => {
+  try {
+    const isConnected = mongoose.connection.readyState === 1;
+    
+    if (isConnected) {
+      // Try a simple query
+      const WaitlistUser = require('./models/WaitlistUser');
+      const count = await WaitlistUser.countDocuments().maxTimeMS(5000);
+      
+      res.json({
+        status: 'success',
+        message: '✅ MongoDB is WORKING on Vercel!',
+        connected: true,
+        count: count,
+        host: mongoose.connection.host,
+        database: mongoose.connection.db?.databaseName
+      });
+    } else {
+      res.json({
+        status: 'warning',
+        message: '⚠️ MongoDB is NOT connected',
+        connected: false,
+        readyState: mongoose.connection.readyState,
+        error: 'Connection not established'
+      });
+    }
+  } catch (error) {
+    res.json({
+      status: 'error',
+      message: '❌ MongoDB query failed',
+      connected: false,
+      error: error.message,
+      errorCode: error.code
+    });
+  }
 });
+
 // Import WaitlistUser model from file
 const WaitlistUser = require('./models/WaitlistUser');
 
