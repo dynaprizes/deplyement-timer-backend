@@ -3,19 +3,25 @@ const router = express.Router();
 const WaitlistUser = require('../models/WaitlistUser');
 const nodemailer = require('nodemailer');
 
-// Email transporter
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
-
+// FIXED: Email transporter (won't crash if env vars missing)
+let transporter;
+if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+  transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    }
+  });
+  console.log('✅ Email transporter configured');
+} else {
+  console.log('⚠️ Email credentials not set, email sending disabled');
+  transporter = null;
+}
 // Join waitlist
 router.post('/join', async (req, res) => {
   try {
-    const { email, referralCode } = req.body;
+    const { email, mobile, referralCode } = req.body; // ADD mobile
     
     // Validate email
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -33,9 +39,10 @@ router.post('/join', async (req, res) => {
       });
     }
     
-    // Create new user
+    // Create new user WITH mobile
     const user = new WaitlistUser({
       email: email.toLowerCase(),
+      mobile: mobile || '', // ADD THIS LINE
       metadata: {
         ip: req.ip,
         userAgent: req.headers['user-agent'],
@@ -82,9 +89,35 @@ router.post('/join', async (req, res) => {
       `
     };
     
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) console.log('Email error:', error);
-    });
+       // Send welcome email (only if transporter configured)
+       if (transporter) {
+        const mailOptions = {
+          from: process.env.EMAIL_USER,
+          to: email,
+          subject: '🎉 Welcome to Dynaprizes Store Waitlist!',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #f59e0b;">Welcome to Dynaprizes Store!</h2>
+              <p>You're now on the waitlist for the all-in-one shopping app.</p>
+              <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                <h3>Your Waitlist Position: <strong>#${user.position}</strong></h3>
+                <p>Total people waiting: ${total.toLocaleString()}</p>
+              </div>
+              <p><strong>Share your referral link to move up:</strong></p>
+              <div style="background: #fff3cd; padding: 15px; border-radius: 5px; font-family: monospace;">
+                https://dynaprizes.com/?ref=${user.referralCode}
+              </div>
+              <p style="margin-top: 30px; color: #666; font-size: 14px;">
+                We'll notify you when we launch + exclusive early offers.
+              </p>
+            </div>
+          `
+        };
+        
+        transporter.sendMail(mailOptions, (error, info) => {
+          if (error) console.log('Email error:', error);
+        });
+      }
     
     res.json({
       success: true,
