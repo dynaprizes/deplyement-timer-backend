@@ -11,13 +11,36 @@ app.use(express.json());
 
 const MONGODB_URI = 'mongodb+srv://dynaprizes_app:Dynaprizes2024!@cluster0.welog2q.mongodb.net/dynaprizes?retryWrites=true&w=majority&appName=Cluster0';
 
-// Connect to MongoDB
-mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('✅ MongoDB Connected!'))
-  .catch(err => {
-    console.log('❌ MongoDB Connection Failed:', err.message);
-    console.log('Attempted URI:', MONGODB_URI); // This will help debug
-  });
+// ===> MONGODB CONNECTION WITH PROPER LOGGING <===
+console.log('🔗 Attempting MongoDB connection...');
+console.log('URI:', MONGODB_URI);
+
+mongoose.connect(MONGODB_URI, { 
+  useNewUrlParser: true, 
+  useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 10000, // 10 second timeout
+  socketTimeoutMS: 45000
+})
+.then(() => {
+  console.log('✅ MONGODB CONNECTED SUCCESSFULLY!');
+  console.log('Database name:', mongoose.connection.db?.databaseName);
+  console.log('Connection state:', mongoose.connection.readyState);
+})
+.catch(err => {
+  console.log('❌ MONGODB CONNECTION FAILED!');
+  console.log('Error name:', err.name);
+  console.log('Error message:', err.message);
+  console.log('Full error:', err);
+});
+
+// Event listeners
+mongoose.connection.on('error', err => {
+  console.log('❌ MongoDB connection error:', err.message);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('⚠️ MongoDB disconnected');
+});
 
 // User Schema
 const userSchema = new mongoose.Schema({
