@@ -13,8 +13,7 @@ app.use(express.json());
 
 // ===> FINAL MONGODB CONNECTION STRING <===
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://dynaprizes_app:DynaPriz3sApp2026@cluster0.welog2q.mongodb.net/dynaprizes?retryWrites=true&w=majority&appName=Cluster0';
-
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://dynaprizes_app:Dynaprizes2026@cluster0.welog2q.mongodb.net/dynaprizes?retryWrites=true&w=majority&appName=Cluster0';
 // ===> MONGODB CONNECTION WITH PROPER LOGGING <===
 console.log('🔗 Attempting MongoDB connection...');
 console.log('URI:', MONGODB_URI);
