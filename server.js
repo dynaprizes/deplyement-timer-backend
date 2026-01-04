@@ -55,37 +55,70 @@ const userSchema = new mongoose.Schema({
 });
 const WaitlistUser = mongoose.model('WaitlistUser', userSchema);
 
-// Health Check Endpoint (MUST SHOW "mongodb" if connected)
+// Health Check Endpoint - SIMPLIFIED
 app.get('/health', async (req, res) => {
   try {
-    const isConnected = mongoose.connection.readyState === 1;
+    // Try to get actual connection status
+    const db = mongoose.connection;
     
-    // If not connected immediately, wait 1 second and check again
-    if (!isConnected) {
-      // Wait a moment for connection to establish
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const isConnectedNow = mongoose.connection.readyState === 1;
-      
-      if (isConnectedNow) {
-        const total = await WaitlistUser.countDocuments();
-        return res.json({ 
-          status: 'ok', 
-          totalUsers: total,
-          database: 'mongodb',
-          timestamp: new Date().toISOString(),
-          message: '✅ MongoDB connected after warm-up'
-        });
-      }
-      
+    // If already connected
+    if (db.readyState === 1) {
+      const total = await WaitlistUser.countDocuments();
+      return res.json({ 
+        status: 'ok', 
+        totalUsers: total,
+        database: 'connected',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // If connecting (readyState === 2)
+    if (db.readyState === 2) {
       return res.json({ 
         status: 'warmup', 
         totalUsers: 0,
         database: 'connecting',
         timestamp: new Date().toISOString(),
-        message: 'MongoDB connection warming up...'
+        message: 'MongoDB is connecting...'
       });
     }
+    
+    // If disconnected, try to connect
+    try {
+      await mongoose.connect(MONGODB_URI, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+        serverSelectionTimeoutMS: 5000
+      });
+      
+      const total = await WaitlistUser.countDocuments();
+      return res.json({ 
+        status: 'ok', 
+        totalUsers: total,
+        database: 'connected',
+        timestamp: new Date().toISOString(),
+        message: '✅ MongoDB connected successfully'
+      });
+    } catch (connectError) {
+      return res.json({ 
+        status: 'error', 
+        totalUsers: 0,
+        database: 'disconnected',
+        timestamp: new Date().toISOString(),
+        error: connectError.message
+      });
+    }
+    
+  } catch (error) {
+    res.json({ 
+      status: 'error', 
+      totalUsers: 0,
+      database: 'error',
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
+});
     
     // Already connected
     const total = await WaitlistUser.countDocuments();
