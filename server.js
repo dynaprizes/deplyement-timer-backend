@@ -162,23 +162,22 @@ console.log('=== DEBUG DUPLICATE CHECK ===');
 console.log('hasEmail:', hasEmail, 'emailLower:', emailLower);
 console.log('hasMobile:', hasMobile, 'cleanMobile:', cleanMobile);
 
-// Build query
-const queryConditions = [];
-if (hasEmail) queryConditions.push({ email: emailLower });
-if (hasMobile) queryConditions.push({ mobile: cleanMobile });
+// Check email OR mobile separately
+let existingUser = null;
 
-const query = queryConditions.length > 0 ? { $or: queryConditions } : {};
-console.log('Query:', JSON.stringify(query));
-
-const existingUser = await WaitlistUser.findOne(query);
-console.log('Found existing user:', existingUser ? 'YES' : 'NO');
-if (existingUser) {
-  console.log('Existing user details:', {
-    email: existingUser.email,
-    mobile: existingUser.mobile,
-    position: existingUser.position
-  });
+// Check by email (if provided)
+if (hasEmail) {
+  existingUser = await WaitlistUser.findOne({ email: emailLower });
+  console.log('Email check for:', emailLower, 'found:', existingUser ? 'YES' : 'NO');
 }
+
+// Check by mobile (if provided AND email not found)
+if (!existingUser && hasMobile && cleanMobile) {
+  existingUser = await WaitlistUser.findOne({ mobile: cleanMobile });
+  console.log('Mobile check for:', cleanMobile, 'found:', existingUser ? 'YES' : 'NO');
+}
+
+console.log('Final found:', existingUser ? 'YES' : 'NO');
     
 if (existingUser) {
   return res.json({
