@@ -168,7 +168,7 @@ app.post('/api/waitlist/join', async (req, res) => {
     
     if (existingUser) {
       return res.json({
-        success: true,
+        success: false,
         message: 'You are already on the waitlist!',
         position: existingUser.position,
         referralCode: existingUser.referralCode,
