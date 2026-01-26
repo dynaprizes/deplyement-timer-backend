@@ -1,4 +1,4 @@
-console.log('=== FORCE NEW DEPLOYMENT - NO LEGACY ===');
+console.log('=== NEW CODE VERSION - ' + new Date().toISOString() + ' ===');
 console.log('Timestamp:', new Date().toISOString());
 console.log('MongoDB URI exists:', !!process.env.MONGODB_URI);
 
@@ -12,37 +12,21 @@ app.use(cors());
 app.use(express.json());
 
 // ===> FINAL MONGODB CONNECTION STRING <===
-
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://dynaprizes_app:Dynaprizes2026@cluster0.welog2q.mongodb.net/dynaprizes?retryWrites=true&w=majority&appName=Cluster0';
-// ===> MONGODB CONNECTION WITH PROPER LOGGING <===
-console.log('🔗 Attempting MongoDB connection...');
-console.log('URI:', MONGODB_URI);
 
+console.log('🔗 Attempting MongoDB connection...');
 mongoose.connect(MONGODB_URI, { 
   useNewUrlParser: true, 
   useUnifiedTopology: true,
-  serverSelectionTimeoutMS: 10000, // 10 second timeout
+  serverSelectionTimeoutMS: 10000,
   socketTimeoutMS: 45000
 })
 .then(() => {
   console.log('✅ MONGODB CONNECTED SUCCESSFULLY!');
   console.log('Database name:', mongoose.connection.db?.databaseName);
-  console.log('Connection state:', mongoose.connection.readyState);
 })
 .catch(err => {
-  console.log('❌ MONGODB CONNECTION FAILED!');
-  console.log('Error name:', err.name);
-  console.log('Error message:', err.message);
-  console.log('Full error:', err);
-});
-
-// Event listeners
-mongoose.connection.on('error', err => {
-  console.log('❌ MongoDB connection error:', err.message);
-});
-
-mongoose.connection.on('disconnected', () => {
-  console.log('⚠️ MongoDB disconnected');
+  console.log('❌ MONGODB CONNECTION FAILED:', err.message);
 });
 
 // User Schema
@@ -55,81 +39,17 @@ const userSchema = new mongoose.Schema({
 });
 const WaitlistUser = mongoose.model('WaitlistUser', userSchema);
 
-// Health Check Endpoint - SIMPLIFIED
+// Health Check
 app.get('/health', async (req, res) => {
   try {
-    // Try to get actual connection status
-    const db = mongoose.connection;
-    
-    // If already connected
-    if (db.readyState === 1) {
-      const total = await WaitlistUser.countDocuments();
-      return res.json({ 
-        status: 'ok', 
-        totalUsers: total,
-        database: 'connected',
-        timestamp: new Date().toISOString()
-      });
-    }
-    
-    // If connecting (readyState === 2)
-    if (db.readyState === 2) {
-      return res.json({ 
-        status: 'warmup', 
-        totalUsers: 0,
-        database: 'connecting',
-        timestamp: new Date().toISOString(),
-        message: 'MongoDB is connecting...'
-      });
-    }
-    
-    // If disconnected, try to connect
-    try {
-      await mongoose.connect(MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-        serverSelectionTimeoutMS: 5000
-      });
-      
-      const total = await WaitlistUser.countDocuments();
-      return res.json({ 
-        status: 'ok', 
-        totalUsers: total,
-        database: 'connected',
-        timestamp: new Date().toISOString(),
-        message: '✅ MongoDB connected successfully'
-      });
-    } catch (connectError) {
-      return res.json({ 
-        status: 'error', 
-        totalUsers: 0,
-        database: 'disconnected',
-        timestamp: new Date().toISOString(),
-        error: connectError.message
-      });
-    }
-    
-  } catch (error) {
-    res.json({ 
-      status: 'error', 
-      totalUsers: 0,
-      database: 'error',
-      timestamp: new Date().toISOString(),
-      error: error.message
-    });
-  }
-});
-    
-    // Already connected
     const total = await WaitlistUser.countDocuments();
     res.json({ 
       status: 'ok', 
       totalUsers: total,
-      database: 'mongodb',
+      database: 'connected',
       timestamp: new Date().toISOString(),
       message: '✅ MongoDB connected'
     });
-    
   } catch (error) {
     res.json({ 
       status: 'error', 
@@ -140,7 +60,8 @@ app.get('/health', async (req, res) => {
     });
   }
 });
-// Join Waitlist Endpoint
+
+// Join Waitlist Endpoint - FIXED
 app.post('/api/waitlist/join', async (req, res) => {
   try {
     const { email, mobile } = req.body;
@@ -157,38 +78,40 @@ app.post('/api/waitlist/join', async (req, res) => {
     const emailLower = hasEmail ? email.toLowerCase() : `mobile_${mobile.replace(/\D/g, '')}@dynaprizes.mobile`;
     const cleanMobile = hasMobile ? mobile.replace(/\D/g, '') : '';
     
-    // DEBUG: Log what we're checking
-console.log('=== DEBUG DUPLICATE CHECK ===');
-console.log('hasEmail:', hasEmail, 'emailLower:', emailLower);
-console.log('hasMobile:', hasMobile, 'cleanMobile:', cleanMobile);
+    // DEBUG
+    console.log('=== EXACT DUPLICATE CHECK ===');
+    console.log('Searching for email:', emailLower);
+    console.log('Database total users:', await WaitlistUser.countDocuments());
 
-// Check email OR mobile separately
-let existingUser = null;
+    let existingUser = null;
 
-// Check by email (if provided)
-if (hasEmail) {
-  existingUser = await WaitlistUser.findOne({ email: emailLower });
-  console.log('Email check for:', emailLower, 'found:', existingUser ? 'YES' : 'NO');
-}
+    // Check by email (if provided)
+    if (hasEmail) {
+      existingUser = await WaitlistUser.findOne({ email: emailLower });
+      console.log('Email check result:', existingUser ? 'FOUND' : 'NOT FOUND');
+      if (existingUser) {
+        console.log('Found user email:', existingUser.email);
+      }
+    }
 
-// Check by mobile (if provided AND email not found)
-if (!existingUser && hasMobile && cleanMobile) {
-  existingUser = await WaitlistUser.findOne({ mobile: cleanMobile });
-  console.log('Mobile check for:', cleanMobile, 'found:', existingUser ? 'YES' : 'NO');
-}
-
-console.log('Final found:', existingUser ? 'YES' : 'NO');
+    // Check by mobile (if provided AND email not found)
+    if (!existingUser && hasMobile && cleanMobile) {
+      existingUser = await WaitlistUser.findOne({ mobile: cleanMobile });
+      console.log('Mobile check result:', existingUser ? 'FOUND' : 'NOT FOUND');
+    }
     
-if (existingUser) {
-  return res.json({
-    success: true,
-    message: 'You are already on the waitlist!',
-    position: existingUser.position,
-    referralCode: existingUser.referralCode,
-    total: await WaitlistUser.countDocuments()
-  });
-}
+    if (existingUser) {
+      console.log('RETURNING: Already registered');
+      return res.json({
+        success: false,  // CHANGED FROM true TO false
+        message: 'You are already on the waitlist!',
+        position: existingUser.position,
+        referralCode: existingUser.referralCode,
+        total: await WaitlistUser.countDocuments()
+      });
+    }
     
+    // Create new user
     const position = await WaitlistUser.countDocuments() + 1;
     const referralCode = 'DYN' + Math.random().toString(36).substr(2, 6).toUpperCase();
     
@@ -200,6 +123,7 @@ if (existingUser) {
       joinedAt: new Date()
     });
     
+    console.log('RETURNING: New user created at position', position);
     res.json({
       success: true,
       message: hasEmail && hasMobile ? 
@@ -220,6 +144,17 @@ if (existingUser) {
   }
 });
 
+// Test endpoint
+app.get('/api/test', async (req, res) => {
+  const testEmail = 'test_' + Date.now() + '@test.com';
+  const result = await WaitlistUser.findOne({ email: testEmail });
+  res.json({ 
+    testEmail, 
+    found: result ? 'YES' : 'NO',
+    totalUsers: await WaitlistUser.countDocuments()
+  });
+});
+
 // Get Stats Endpoint
 app.get('/api/waitlist/stats', async (req, res) => {
   try {
@@ -235,7 +170,6 @@ app.get('/api/waitlist/stats', async (req, res) => {
       week: weekCount,
       timestamp: new Date().toISOString()
     });
-    
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -263,7 +197,8 @@ app.get('/', (req, res) => {
       '/health',
       '/api/waitlist/join (POST)',
       '/api/waitlist/stats (GET)', 
-      '/api/waitlist/admin/users (GET)'
+      '/api/waitlist/admin/users (GET)',
+      '/api/test (GET)'
     ]
   });
 });
