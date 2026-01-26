@@ -157,24 +157,38 @@ app.post('/api/waitlist/join', async (req, res) => {
     const emailLower = hasEmail ? email.toLowerCase() : `mobile_${mobile.replace(/\D/g, '')}@dynaprizes.mobile`;
     const cleanMobile = hasMobile ? mobile.replace(/\D/g, '') : '';
     
-    const existingUser = await WaitlistUser.findOne({
-  $or: [
-    // Only check email if provided
-    ...(hasEmail ? [{ email: emailLower }] : []),
-    // Only check mobile if provided
-    ...(hasMobile ? [{ mobile: cleanMobile }] : [])
-  ].filter(condition => Object.keys(condition).length > 0)
-});
+    // DEBUG: Log what we're checking
+console.log('=== DEBUG DUPLICATE CHECK ===');
+console.log('hasEmail:', hasEmail, 'emailLower:', emailLower);
+console.log('hasMobile:', hasMobile, 'cleanMobile:', cleanMobile);
+
+// Build query
+const queryConditions = [];
+if (hasEmail) queryConditions.push({ email: emailLower });
+if (hasMobile) queryConditions.push({ mobile: cleanMobile });
+
+const query = queryConditions.length > 0 ? { $or: queryConditions } : {};
+console.log('Query:', JSON.stringify(query));
+
+const existingUser = await WaitlistUser.findOne(query);
+console.log('Found existing user:', existingUser ? 'YES' : 'NO');
+if (existingUser) {
+  console.log('Existing user details:', {
+    email: existingUser.email,
+    mobile: existingUser.mobile,
+    position: existingUser.position
+  });
+}
     
-    if (existingUser) {
-      return res.json({
-        success: true,
-        message: 'You are already on the waitlist!',
-        position: existingUser.position,
-        referralCode: existingUser.referralCode,
-        total: await WaitlistUser.countDocuments()
-      });
-    }
+if (existingUser) {
+  return res.json({
+    success: true,
+    message: 'You are already on the waitlist!',
+    position: existingUser.position,
+    referralCode: existingUser.referralCode,
+    total: await WaitlistUser.countDocuments()
+  });
+}
     
     const position = await WaitlistUser.countDocuments() + 1;
     const referralCode = 'DYN' + Math.random().toString(36).substr(2, 6).toUpperCase();
