@@ -158,11 +158,13 @@ app.post('/api/waitlist/join', async (req, res) => {
     const cleanMobile = hasMobile ? mobile.replace(/\D/g, '') : '';
     
     const existingUser = await WaitlistUser.findOne({
-      $or: [
-        { email: emailLower },
-        { mobile: cleanMobile }
-      ]
-    });
+  $or: [
+    // Only check email if provided
+    ...(hasEmail ? [{ email: emailLower }] : []),
+    // Only check mobile if provided
+    ...(hasMobile ? [{ mobile: cleanMobile }] : [])
+  ].filter(condition => Object.keys(condition).length > 0)
+});
     
     if (existingUser) {
       return res.json({
