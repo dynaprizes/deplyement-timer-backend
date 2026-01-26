@@ -1,4 +1,4 @@
-console.log('=== FIXED VERSION - ' + new Date().toISOString() + ' ===');
+console.log('=== ULTIMATE FIX VERSION - ' + new Date().toISOString() + ' ===');
 
 require('dotenv').config();
 const express = require('express');
@@ -43,18 +43,21 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// Join Waitlist - MAIN FIX
+// Join Waitlist - ULTIMATE FIX
 app.post('/api/waitlist/join', async (req, res) => {
   try {
-    console.log('\n=== JOIN REQUEST ===');
+    console.log('\n🔵 === NEW REQUEST START ===');
     const { email, mobile } = req.body;
-    console.log('Received:', { email, mobile });
+    console.log('📥 Raw input:', { email: email || '(empty)', mobile: mobile || '(empty)' });
     
     // Validate
     const hasEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     const hasMobile = mobile && /^[0-9]{10,15}$/.test(mobile.replace(/\D/g, ''));
     
+    console.log('✅ Validation:', { hasEmail, hasMobile });
+    
     if (!hasEmail && !hasMobile) {
+      console.log('❌ No valid input');
       return res.status(400).json({ 
         success: false,
         error: 'Please provide either a valid email or mobile number (10+ digits)' 
@@ -64,44 +67,82 @@ app.post('/api/waitlist/join', async (req, res) => {
     const emailLower = hasEmail ? email.toLowerCase() : `mobile_${mobile.replace(/\D/g, '')}@dynaprizes.mobile`;
     const cleanMobile = hasMobile ? mobile.replace(/\D/g, '') : '';
     
-    console.log('Processing:', { emailLower, cleanMobile });
+    console.log('🔄 Processing:', { 
+      emailLower, 
+      cleanMobile: cleanMobile || '(empty)' 
+    });
     
-    // SIMPLE DUPLICATE CHECK - NO $or, NO complex queries
+    // ===== ULTIMATE DUPLICATE CHECK =====
     let existingUser = null;
+    let foundBy = 'none';
     
+    // 1. Check email EXACTLY
     if (hasEmail) {
-      console.log('Checking email:', emailLower);
-      existingUser = await WaitlistUser.findOne({ email: emailLower });
-      console.log('Email check result:', existingUser ? 'FOUND' : 'NOT FOUND');
+      console.log('🔍 Checking email in database:', emailLower);
+      const emailResult = await WaitlistUser.findOne({ email: emailLower });
+      console.log('📊 Email query result:', emailResult);
+      
+      if (emailResult && emailResult._id) {
+        existingUser = emailResult;
+        foundBy = 'email';
+        console.log('🎯 FOUND by email:', emailResult.email);
+      } else {
+        console.log('❌ Email NOT found in database');
+      }
     }
     
+    // 2. Check mobile EXACTLY (only if email not found)
     if (!existingUser && hasMobile && cleanMobile) {
-      console.log('Checking mobile:', cleanMobile);
-      existingUser = await WaitlistUser.findOne({ mobile: cleanMobile });
-      console.log('Mobile check result:', existingUser ? 'FOUND' : 'NOT FOUND');
+      console.log('🔍 Checking mobile in database:', cleanMobile);
+      const mobileResult = await WaitlistUser.findOne({ mobile: cleanMobile });
+      console.log('📊 Mobile query result:', mobileResult);
+      
+      if (mobileResult && mobileResult._id) {
+        existingUser = mobileResult;
+        foundBy = 'mobile';
+        console.log('🎯 FOUND by mobile:', mobileResult.mobile);
+      } else {
+        console.log('❌ Mobile NOT found in database');
+      }
     }
     
-    // If duplicate found
+    console.log('📋 FINAL duplicate check:');
+    console.log('   Existing user:', existingUser ? 'YES' : 'NO');
+    console.log('   Found by:', foundBy);
     if (existingUser) {
-      console.log('DUPLICATE FOUND:', {
+      console.log('   User details:', {
         email: existingUser.email,
         mobile: existingUser.mobile,
         position: existingUser.position
       });
+    }
+    
+    // ===== HANDLE DUPLICATE =====
+    if (existingUser) {
+      const totalCount = await WaitlistUser.countDocuments();
+      console.log('🚫 DUPLICATE - Returning error. Total users:', totalCount);
+      
       return res.json({
-        success: false,  // <--- FIXED: false for duplicates
+        success: false,  // MUST BE false for duplicates
         message: 'You are already on the waitlist!',
         position: existingUser.position,
         referralCode: existingUser.referralCode,
-        total: await WaitlistUser.countDocuments()
+        total: totalCount
       });
     }
     
-    // Create new user
-    console.log('Creating NEW user...');
+    // ===== CREATE NEW USER =====
+    console.log('🆕 Creating NEW user...');
     const totalUsers = await WaitlistUser.countDocuments();
     const position = totalUsers + 1;
     const referralCode = 'DYN' + Math.random().toString(36).substr(2, 6).toUpperCase();
+    
+    console.log('📝 New user data:', {
+      email: emailLower,
+      mobile: cleanMobile || '(empty)',
+      position,
+      referralCode
+    });
     
     const user = await WaitlistUser.create({
       email: emailLower,
@@ -111,22 +152,24 @@ app.post('/api/waitlist/join', async (req, res) => {
       joinedAt: new Date()
     });
     
-    console.log('User created:', { 
-      email: user.email, 
-      position: user.position,
-      totalUsers: totalUsers + 1 
-    });
+    const newTotal = await WaitlistUser.countDocuments();
+    console.log('✅ User CREATED successfully!');
+    console.log('   Email:', user.email);
+    console.log('   Position:', user.position);
+    console.log('   Total users now:', newTotal);
     
     res.json({
       success: true,
       message: hasEmail ? '🎉 Successfully joined with email!' : '🎉 Successfully joined with mobile!',
       position: user.position,
       referralCode: user.referralCode,
-      total: await WaitlistUser.countDocuments()
+      total: newTotal
     });
     
+    console.log('🟢 === REQUEST END ===\n');
+    
   } catch (error) {
-    console.error('ERROR:', error);
+    console.error('💥 SERVER ERROR:', error);
     res.status(500).json({ 
       success: false,
       error: 'Server error' 
@@ -168,4 +211,4 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
