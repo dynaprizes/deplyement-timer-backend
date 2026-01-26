@@ -1,4 +1,4 @@
-console.log('=== ULTIMATE FIX VERSION - ' + new Date().toISOString() + ' ===');
+console.log('=== DEBUG VERSION - ' + new Date().toISOString() + ' ===');
 
 require('dotenv').config();
 const express = require('express');
@@ -9,17 +9,15 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://dynaprizes_app:Dynaprizes2026@cluster0.welog2q.mongodb.net/dynaprizes?retryWrites=true&w=majority&appName=Cluster0';
 
 mongoose.connect(MONGODB_URI, { 
   useNewUrlParser: true, 
   useUnifiedTopology: true 
 })
-.then(() => console.log('✅ MongoDB Connected'))
+.then(() => console.log('✅ MongoDB Connected to:', mongoose.connection.db.databaseName))
 .catch(err => console.log('❌ MongoDB Error:', err.message));
 
-// User Schema
 const userSchema = new mongoose.Schema({
   email: String,
   mobile: String,
@@ -29,7 +27,6 @@ const userSchema = new mongoose.Schema({
 });
 const WaitlistUser = mongoose.model('WaitlistUser', userSchema);
 
-// Health Check
 app.get('/health', async (req, res) => {
   try {
     const total = await WaitlistUser.countDocuments();
@@ -43,14 +40,12 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// Join Waitlist - ULTIMATE FIX
 app.post('/api/waitlist/join', async (req, res) => {
   try {
     console.log('\n🔵 === NEW REQUEST START ===');
     const { email, mobile } = req.body;
     console.log('📥 Raw input:', { email: email || '(empty)', mobile: mobile || '(empty)' });
     
-    // Validate
     const hasEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     const hasMobile = mobile && /^[0-9]{10,15}$/.test(mobile.replace(/\D/g, ''));
     
@@ -67,82 +62,74 @@ app.post('/api/waitlist/join', async (req, res) => {
     const emailLower = hasEmail ? email.toLowerCase() : `mobile_${mobile.replace(/\D/g, '')}@dynaprizes.mobile`;
     const cleanMobile = hasMobile ? mobile.replace(/\D/g, '') : '';
     
-    console.log('🔄 Processing:', { 
-      emailLower, 
-      cleanMobile: cleanMobile || '(empty)' 
-    });
+    console.log('🔄 Processing:', { emailLower, cleanMobile: cleanMobile || '(empty)' });
     
-    // ===== ULTIMATE DUPLICATE CHECK =====
+    // ===== ULTIMATE DEBUG - DIRECT MONGODB QUERY =====
+    console.log('\n🔍 === MONGODB DIRECT QUERY DEBUG ===');
+    
+    // Get native MongoDB collection
+    const db = mongoose.connection.db;
+    const collection = db.collection('waitlistusers');
+    
+    // Query 1: Native MongoDB driver
+    console.log('1. Native MongoDB query for email:', emailLower);
+    const nativeQuery = { email: emailLower };
+    const nativeResult = await collection.findOne(nativeQuery);
+    console.log('   Native result:', nativeResult);
+    console.log('   Native found?', nativeResult ? 'YES' : 'NO');
+    
+    // Query 2: Mongoose
+    console.log('2. Mongoose query for email:', emailLower);
+    const mongooseQuery = { email: emailLower };
+    const mongooseResult = await WaitlistUser.findOne(mongooseQuery);
+    console.log('   Mongoose result:', mongooseResult);
+    console.log('   Mongoose found?', mongooseResult ? 'YES' : 'NO');
+    
+    // Query 3: Find ALL users (debug)
+    console.log('3. All users in collection:');
+    const allUsers = await collection.find({}).limit(5).toArray();
+    console.log('   First 5 users:', allUsers.map(u => ({ email: u.email, mobile: u.mobile })));
+    
+    // ===== DECISION LOGIC =====
     let existingUser = null;
-    let foundBy = 'none';
-    
-    // 1. Check email EXACTLY
-    if (hasEmail) {
-      console.log('🔍 Checking email in database:', emailLower);
-      const emailResult = await WaitlistUser.findOne({ email: emailLower });
-      console.log('📊 Email query result:', emailResult);
-      
-      if (emailResult && emailResult._id) {
-        existingUser = emailResult;
-        foundBy = 'email';
-        console.log('🎯 FOUND by email:', emailResult.email);
-      } else {
-        console.log('❌ Email NOT found in database');
-      }
+    if (nativeResult) {
+      existingUser = nativeResult;
+      console.log('🎯 Using NATIVE result as existing user');
+    } else if (mongooseResult) {
+      existingUser = mongooseResult;
+      console.log('🎯 Using MONGOOSE result as existing user');
+    } else {
+      console.log('✅ No existing user found - EMAIL IS NEW');
     }
     
-    // 2. Check mobile EXACTLY (only if email not found)
-    if (!existingUser && hasMobile && cleanMobile) {
-      console.log('🔍 Checking mobile in database:', cleanMobile);
-      const mobileResult = await WaitlistUser.findOne({ mobile: cleanMobile });
-      console.log('📊 Mobile query result:', mobileResult);
-      
-      if (mobileResult && mobileResult._id) {
-        existingUser = mobileResult;
-        foundBy = 'mobile';
-        console.log('🎯 FOUND by mobile:', mobileResult.mobile);
-      } else {
-        console.log('❌ Mobile NOT found in database');
-      }
-    }
-    
-    console.log('📋 FINAL duplicate check:');
-    console.log('   Existing user:', existingUser ? 'YES' : 'NO');
-    console.log('   Found by:', foundBy);
+    console.log('📋 FINAL existingUser:', existingUser ? 'YES' : 'NO');
     if (existingUser) {
-      console.log('   User details:', {
+      console.log('   Details:', {
         email: existingUser.email,
         mobile: existingUser.mobile,
         position: existingUser.position
       });
     }
     
-    // ===== HANDLE DUPLICATE =====
+    // ===== HANDLE RESULT =====
     if (existingUser) {
-      const totalCount = await WaitlistUser.countDocuments();
-      console.log('🚫 DUPLICATE - Returning error. Total users:', totalCount);
-      
+      console.log('🚫 DUPLICATE DETECTED');
       return res.json({
-        success: false,  // MUST BE false for duplicates
+        success: false,
         message: 'You are already on the waitlist!',
         position: existingUser.position,
         referralCode: existingUser.referralCode,
-        total: totalCount
+        total: await WaitlistUser.countDocuments()
       });
     }
     
     // ===== CREATE NEW USER =====
-    console.log('🆕 Creating NEW user...');
+    console.log('🆕 CREATING NEW USER');
     const totalUsers = await WaitlistUser.countDocuments();
     const position = totalUsers + 1;
     const referralCode = 'DYN' + Math.random().toString(36).substr(2, 6).toUpperCase();
     
-    console.log('📝 New user data:', {
-      email: emailLower,
-      mobile: cleanMobile || '(empty)',
-      position,
-      referralCode
-    });
+    console.log('📝 New user data:', { email: emailLower, position, referralCode });
     
     const user = await WaitlistUser.create({
       email: emailLower,
@@ -152,18 +139,18 @@ app.post('/api/waitlist/join', async (req, res) => {
       joinedAt: new Date()
     });
     
-    const newTotal = await WaitlistUser.countDocuments();
-    console.log('✅ User CREATED successfully!');
-    console.log('   Email:', user.email);
-    console.log('   Position:', user.position);
-    console.log('   Total users now:', newTotal);
+    console.log('✅ USER CREATED:', { 
+      email: user.email, 
+      position: user.position,
+      id: user._id 
+    });
     
     res.json({
       success: true,
       message: hasEmail ? '🎉 Successfully joined with email!' : '🎉 Successfully joined with mobile!',
       position: user.position,
       referralCode: user.referralCode,
-      total: newTotal
+      total: await WaitlistUser.countDocuments()
     });
     
     console.log('🟢 === REQUEST END ===\n');
@@ -177,7 +164,6 @@ app.post('/api/waitlist/join', async (req, res) => {
   }
 });
 
-// Stats
 app.get('/api/waitlist/stats', async (req, res) => {
   try {
     const total = await WaitlistUser.countDocuments();
@@ -192,7 +178,6 @@ app.get('/api/waitlist/stats', async (req, res) => {
   }
 });
 
-// Admin
 app.get('/api/waitlist/admin/users', async (req, res) => {
   try {
     const users = await WaitlistUser.find().sort({ joinedAt: -1 });
@@ -202,7 +187,6 @@ app.get('/api/waitlist/admin/users', async (req, res) => {
   }
 });
 
-// Root
 app.get('/', (req, res) => {
   res.json({ 
     message: 'Dynaprizes Waitlist API',
